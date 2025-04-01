@@ -1,127 +1,132 @@
 #include <stdio.h>
 #include <stdlib.h>
-#include <sys/socket.h>
-#include <sys/types.h>
-#include <sys/time.h>
-#include <netinet/in.h>
 #include <string.h>
 #include <unistd.h>
 #include <arpa/inet.h>
-#include <fcntl.h>
-int main()
-{
-    int s_sock, c_sock;
-    s_sock = socket(AF_INET, SOCK_STREAM, 0);
-    struct sockaddr_in server, other;
-    memset(&server, 0, sizeof(server));
-    memset(&other, 0, sizeof(other));
-    server.sin_family = AF_INET;
-    server.sin_port = htons(9009);
-    server.sin_addr.s_addr = INADDR_ANY;
-    socklen_t add;
+#include <sys/socket.h>
+#include <sys/types.h>
+#include <sys/time.h>
 
-    if (bind(s_sock, (struct sockaddr *)&server, sizeof(server)) == -1)
-    {
-        printf("Binding failed\n");
+// Configuration constants
+#define PORT 9060                // Port number for communication
+#define WINDOW_SIZE 2            // Number of frames that can be sent without waiting for ACK
+#define TOTAL_FRAMES 5           // Total number of frames to send
+#define FRAME_SIZE 20            // Maximum size of each frame
+
+/* Function to send a frame to the client */
+void send_frame(int sock, int frame_no) {
+    char frame[FRAME_SIZE];
+    // Format the frame with its number (e.g., "Frame-0")
+    snprintf(frame, sizeof(frame), "Frame-%d", frame_no);
+    printf("Sending: %s\n", frame);
+    // Send the frame (including null terminator)
+    write(sock, frame, strlen(frame) + 1);
+}
+
+/* Function to wait for acknowledgment with timeout */
+int wait_for_ack(int sock, int frame_no) {
+    char ack[FRAME_SIZE];        // Buffer for acknowledgment
+    fd_set read_fds;             // File descriptor set for select()
+    struct timeval timeout;      // Timeout structure
+
+    // Initialize the file descriptor set
+    FD_ZERO(&read_fds);
+    FD_SET(sock, &read_fds);
+
+    // Set timeout to 3 seconds
+    timeout.tv_sec = 3;
+    timeout.tv_usec = 0;
+
+    // Wait for socket to become readable (ACK received) or timeout
+    int retval = select(sock + 1, &read_fds, NULL, NULL, &timeout);
+
+    if (retval == -1) {
+        perror("select()");      // Error in select()
         return 0;
+    } else if (retval == 0) {
+        printf("Timeout! No ACK for frame-%d\n", frame_no);
+        return 0;                // Timeout occurred
+    } else {
+        read(sock, ack, sizeof(ack));  // Read the ACK
+        printf("Received ACK: %s\n", ack);
+        return 1;                // ACK received successfully
     }
-    printf("\tServer Up\n Go back n (n=3) used to send 10 messages \n\n");
-    listen(s_sock, 10);
-    add = sizeof(other);
-    c_sock = accept(s_sock, (struct sockaddr *)&other, &add);
-    time_t t1, t2;
-    char msg[50] = "server message :";
-    char buff[50];
-    int flag = 0;
+}
 
-    fd_set set1, set2, set3;
-    struct timeval timeout1, timeout2, timeout3;
-    int rv1, rv2, rv3;
+int main() {
+    int server_sock, client_sock;      // Socket file descriptors
+    struct sockaddr_in server_addr, client_addr;  // Address structures
+    socklen_t addr_size;               // Size of address structure
 
-    int i = -1;
-qq:
-    i = i + 1;
-    bzero(buff, sizeof(buff));
-    char buff2[60];
-    bzero(buff2, sizeof(buff2));
-    strcpy(buff2, "server message :");
-    buff2[strlen(buff2)] = i + '0';
-    buff2[strlen(buff2)] = '\0';
-    printf("Message sent to client :%s \n", buff2);
-    write(c_sock, buff2, sizeof(buff2));
-    usleep(1000);
-    i = i + 1;
-    bzero(buff2, sizeof(buff2));
-    strcpy(buff2, msg);
-    buff2[strlen(msg)] = i + '0';
-    printf("Message sent to client :%s \n", buff2);
-    write(c_sock, buff2, sizeof(buff2));
-    i = i + 1;
-    usleep(1000);
-qqq:
-    bzero(buff2, sizeof(buff2));
-    strcpy(buff2, msg);
-    buff2[strlen(msg)] = i + '0';
-    printf("Message sent to client :%s \n", buff2);
-    write(c_sock, buff2, sizeof(buff2));
-    FD_ZERO(&set1);
-    FD_SET(c_sock, &set1);
-    timeout1.tv_sec = 2;
-    timeout1.tv_usec = 0;
-
-    rv1 = select(c_sock + 1, &set1, NULL, NULL, &timeout1);
-    if (rv1 == -1)
-        perror("select error ");
-    else if (rv1 == 0)
-    {
-        printf("Going back from %d:timeout \n", i);
-        i = i - 3;
-        goto qq;
-    }
-    else
-    {
-        read(c_sock, buff, sizeof(buff));
-        printf("Message from Client: %s\n", buff);
-        i++;
-        if (i <= 9)
-            goto qqq;
-    }
-qq2:
-    FD_ZERO(&set2);
-    FD_SET(c_sock, &set2);
-    timeout2.tv_sec = 3;
-    timeout2.tv_usec = 0;
-    rv2 = select(c_sock + 1, &set2, NULL, NULL, &timeout2);
-    if (rv2 == -1)
-        perror("select error "); // an error accured
-    else if (rv2 == 0)
-    {
-        printf("Going back from %d:timeout on last 2\n", i - 1);
-        i = i - 2;
-        bzero(buff2, sizeof(buff2));
-        strcpy(buff2, msg);
-        buff2[strlen(buff2)] = i + '0';
-        write(c_sock, buff2, sizeof(buff2));
-        usleep(1000);
-        bzero(buff2, sizeof(buff2));
-        i++;
-        strcpy(buff2, msg);
-        buff2[strlen(buff2)] = i + '0';
-        write(c_sock, buff2, sizeof(buff2));
-        goto qq2;
-    } // a timeout occured
-    else
-    {
-        read(c_sock, buff, sizeof(buff));
-        printf("Message from Client: %s\n", buff);
-        bzero(buff, sizeof(buff));
-        read(c_sock, buff, sizeof(buff));
-        printf("Message from Client: %s\n", buff);
+    // Create TCP socket
+    server_sock = socket(AF_INET, SOCK_STREAM, 0);
+    if (server_sock < 0) {
+        perror("Socket creation failed");
+        exit(EXIT_FAILURE);
     }
 
-    //}
+    // Configure server address
+    server_addr.sin_family = AF_INET;           // IPv4
+    server_addr.sin_port = htons(PORT);         // Port number in network byte order
+    server_addr.sin_addr.s_addr = INADDR_ANY;   // Accept connections on any interface
 
-    close(c_sock);
-    close(s_sock);
+    // Bind socket to the server address
+    if (bind(server_sock, (struct sockaddr*)&server_addr, sizeof(server_addr)) < 0) {
+        perror("Bind failed");
+        exit(EXIT_FAILURE);
+    }
+
+    // Listen for incoming connections (backlog queue of 1)
+    listen(server_sock, 1);
+
+    printf("Server is up, waiting for connection...\n");
+
+    // Accept incoming connection
+    addr_size = sizeof(client_addr);
+    client_sock = accept(server_sock, (struct sockaddr*)&client_addr, &addr_size);
+    if (client_sock < 0) {
+        perror("Accept failed");
+        exit(EXIT_FAILURE);
+    }
+
+    printf("Client connected! Starting Go-Back-N Protocol (Window Size = %d)\n\n", WINDOW_SIZE);
+
+    int next_frame = 0;  // Next frame number to be sent
+
+    // Main transmission loop
+    while (next_frame < TOTAL_FRAMES) {
+        int sent_frames = 0;  // Counter for frames sent in this window
+
+        // Send a window of frames (up to WINDOW_SIZE frames)
+        for (int i = 0; i < WINDOW_SIZE && next_frame + i < TOTAL_FRAMES; i++) {
+            send_frame(client_sock, next_frame + i);
+            sent_frames++;
+        }
+
+        int acks_received = 0;  // Counter for ACKs received
+
+        // Wait for ACKs for each sent frame
+        for (int i = 0; i < sent_frames; i++) {
+            int ack = wait_for_ack(client_sock, next_frame + i);
+            if (!ack) {
+                // If ACK not received, go back to the failed frame
+                printf("Go-Back to frame-%d\n\n", next_frame + i);
+                next_frame += i;  // Adjust next_frame to retransmit from the failed frame
+                break;
+            }
+            acks_received++;
+        }
+
+        // If all ACKs received, move window forward
+        if (acks_received == sent_frames) {
+            next_frame += sent_frames;
+        }
+    }
+
+    printf("All frames sent successfully!\n");
+
+    // Cleanup
+    close(client_sock);
+    close(server_sock);
     return 0;
 }
