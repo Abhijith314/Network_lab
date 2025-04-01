@@ -2,51 +2,76 @@
 #include <unistd.h>
 #include <string.h>
 #include <stdlib.h>
-#include <sys/stat.h>
-#include <sys/types.h>
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
 
-void main() {
-    struct sockaddr_in server; // Structure to store server address
-    int sockfd, n; // Socket file descriptor and size variable
-    char rBuf[100] = "", sBuf[100] = ""; // Buffers for receiving and sending data
-    
-    sockfd = socket(AF_INET, SOCK_DGRAM, 0); // Create a socket (UDP)
-                                          // SOCK_DGRAM indicates that its UDP
-    if (sockfd == -1) { 
-        printf("socket creation failed...\n"); 
-        exit(0); 
-    } 
-    else
-        printf("Socket successfully created..\n"); 
+#define BUFFER_SIZE 100
+#define SERVER_PORT 2025
+#define SERVER_IP "127.0.0.1"
 
-    // Initialize server address structure
-    server.sin_family = AF_INET; // IPv4
-    server.sin_port = 2025; // Port number
-    server.sin_addr.s_addr = inet_addr("127.0.0.1"); // IP address
+int main() {
+    struct sockaddr_in server;
+    int sockfd;
+    socklen_t server_len;
+    char rBuf[BUFFER_SIZE] = "";
+    char sBuf[BUFFER_SIZE] = "";
     
-    printf("\nClient ready….\n"); // Indicate that client is ready
-    n = sizeof server; // Get the size of the server address structure
-    
-    while(1) { //infinite loop for communication
-    
-        printf("\nClient:"); // Prompt for user input
-        gets(sBuf); // Get user input
-        
-        sendto(sockfd, sBuf, sizeof sBuf, 0, (struct sockaddr *)&server, n); // Send data to the server
-        
-        if(strcmp(sBuf, "end") == 0) // If user enters "end", break the loop
+    // Create UDP socket
+    sockfd = socket(AF_INET, SOCK_DGRAM, 0);
+    if (sockfd == -1) {
+        perror("Socket creation failed");
+        exit(EXIT_FAILURE);
+    }
+    printf("Socket successfully created\n");
+
+    // Configure server address
+    memset(&server, 0, sizeof(server));
+    server.sin_family = AF_INET;
+    server.sin_port = htons(SERVER_PORT);
+    server.sin_addr.s_addr = inet_addr(SERVER_IP);
+
+    printf("Client ready to communicate with server %s:%d\n", SERVER_IP, SERVER_PORT);
+    server_len = sizeof(server);
+
+    while(1) {
+        // Get user input
+        printf("\nClient: ");
+        memset(sBuf, 0, BUFFER_SIZE);
+        if (fgets(sBuf, BUFFER_SIZE, stdin) == NULL) {
+            perror("Input error");
             break;
+        }
         
-        recvfrom(sockfd, rBuf, sizeof rBuf, 0, (struct sockaddr*)&server, &n); // Receive data from the server
-        printf("\nServer:%s", rBuf); // Print the received data
+        // Remove newline character
+        sBuf[strcspn(sBuf, "\n")] = '\0';
         
-        if(strcmp(rBuf, "end") == 0) // If server sends "end", break the loop
+        // Send message to server
+        if (sendto(sockfd, sBuf, strlen(sBuf)+1, 0, 
+                 (struct sockaddr *)&server, server_len) <= 0) {
+            perror("Send failed");
             break;
+        }
+        
+        if(strcmp(sBuf, "end") == 0) {
+            break;
+        }
+        
+        // Receive response from server
+        memset(rBuf, 0, BUFFER_SIZE);
+        if (recvfrom(sockfd, rBuf, BUFFER_SIZE, 0, 
+                    (struct sockaddr *)&server, &server_len) <= 0) {
+            perror("Receive failed");
+            break;
+        }
+        printf("Server: %s", rBuf);
+        
+        if(strcmp(rBuf, "end") == 0) {
+            break;
+        }
     }
     
-    close(sockfd); // Close the socket
+    close(sockfd);
+    printf("Client shutting down\n");
+    return 0;
 }
-
