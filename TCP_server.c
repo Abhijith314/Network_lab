@@ -1,95 +1,59 @@
-#include <stdio.h>
-#include <string.h>
-#include <stdlib.h>
-#include <unistd.h>
-#include <sys/stat.h>
-#include <sys/types.h>
-#include <sys/socket.h>
-#include <netinet/in.h>
-#include <arpa/inet.h>
-
-#define BUFFER_SIZE 100
+#include<stdio.h>
+#include<string.h>
+#include<stdlib.h>
+#include<unistd.h>
+#include<sys/stat.h>
+#include<sys/types.h>
+#include<sys/socket.h>
+#include<netinet/in.h>
+#include<arpa/inet.h>
 
 int main() {
     struct sockaddr_in client, server;
-    int sockfd, n, confd, bindsts, lstnsts;
-    char rBuf[BUFFER_SIZE] = "", sBuf[BUFFER_SIZE] = "";
-    
-    // Create socket
+    int sockfd, n, confd, bindsts, lstnsts; 
+    char rBuf[100] = "", sBuf[100] = "";
     sockfd = socket(AF_INET, SOCK_STREAM, 0);
-    if (sockfd == -1) { 
-        perror("Socket creation failed");
-        exit(EXIT_FAILURE); 
+    if (sockfd == -1) {
+        printf("socket creation failed...\n");
+        exit(0); 
     }
-    printf("Socket successfully created\n");
-  
-    // Configure server address
+    else
+        printf("Socket successfully created..\n");
     server.sin_family = AF_INET;
-    server.sin_port = htons(6060); // Using htons for port number
+    server.sin_port = 6061; 
     server.sin_addr.s_addr = inet_addr("127.0.0.1");
-    
-    // Bind socket
-    bindsts = bind(sockfd, (struct sockaddr *)&server, sizeof(server));
+    bindsts = bind(sockfd, (struct sockaddr *)&server, sizeof(server)); 
     if (bindsts != 0) { 
-        perror("Socket bind failed");
-        close(sockfd);
-        exit(EXIT_FAILURE); 
-    }
-    printf("Socket successfully bound\n");
-  
-    // Listen for connections
-    lstnsts = listen(sockfd, 1);
+        printf("socket bind failed...\n"); 
+        exit(0); 
+    } 
+    else
+        printf("Socket successfully binded..\n"); 
+    lstnsts = listen(sockfd, 1); 
     if (lstnsts != 0) { 
-        perror("Listen failed");
-        close(sockfd);
-        exit(EXIT_FAILURE); 
-    }
-    printf("Server listening on port 6060\n");
-
-    printf("Server ready, waiting for client...\n");
-    n = sizeof(client);
-    confd = accept(sockfd, (struct sockaddr *)&client, (socklen_t *)&n);
-    if (confd < 0) {
-        perror("Accept failed");
-        close(sockfd);
-        exit(EXIT_FAILURE);
-    }
-    printf("Client connected\n");
-        
+        printf("Listen failed...\n"); 
+        exit(0); 
+    } 
+    else
+        printf("Server listening..\n"); 
+    printf("\nServer ready, waiting for client….\n");
+    confd = accept(sockfd, (struct sockaddr *)&client, &n);
     while(1) {
-        // Receive message from client
-        memset(rBuf, 0, BUFFER_SIZE); // Clear buffer
-        if (recv(confd, rBuf, BUFFER_SIZE, 0) <= 0) {
-            perror("Receive failed or connection closed");
-            break;
-        }
-        printf("Client: %s\n", rBuf);
-        
-        if(strcmp(rBuf, "end\n") == 0 || strcmp(rBuf, "end") == 0) {
-            break;
-        }
-        
-        // Get server response
-        printf("Server: ");
-        memset(sBuf, 0, BUFFER_SIZE); // Clear buffer
-        if (fgets(sBuf, BUFFER_SIZE, stdin) == NULL) {
-            perror("Input error");
-            break;
-        }
-        
-        // Send message to client
-        if (send(confd, sBuf, strlen(sBuf), 0) <= 0) {
-            perror("Send failed");
-            break;
-        }
-        
+        n = sizeof(client); 
+        recv(confd, rBuf, sizeof(rBuf), 0);
+        printf("\nClient: %s", rBuf);
         if(strcmp(sBuf, "end\n") == 0 || strcmp(sBuf, "end") == 0) {
             break;
         }
+        printf("\nServer: "); 
+        fgets(sBuf, sizeof(sBuf), stdin);
+        send(confd, sBuf, sizeof(sBuf), 0); 
+        if(strcmp(rBuf, "end\n") == 0 || strcmp(rBuf, "end") == 0) {
+            break;
+        }
+        printf("\n"); 
     }
-    
-    printf("Closing connection\n");
-    close(confd);
-    close(sockfd);
+    close(confd); 
+    close(sockfd); 
     return 0;
 }
